@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,7 +20,6 @@ import (
 
 func ListenAndServe(ctx context.Context, address string, configs []*config.Config, pathPrefix []string) error {
 	server := server.DefaultAPIServer()
-	var err error
 	for index, config := range configs {
 		server.Schemas.MustImportAndCustomize(model.Channel{}, func(schema *types.APISchema) {
 			schema.Store = store.New(config)
@@ -35,30 +33,26 @@ func ListenAndServe(ctx context.Context, address string, configs []*config.Confi
 
 		pathPrefix[index] = strings.TrimPrefix(pathPrefix[index], "/")
 		pathPrefix[index] = strings.TrimSuffix(pathPrefix[index], "/")
-
-		router := mux.NewRouter()
-
-		apiroot.Register(server.Schemas, []string{pathPrefix[index]}, nil)
-		router.MatcherFunc(setType("apiRoot", pathPrefix[index])).Path("/").Handler(server)
-		router.MatcherFunc(setType("apiRoot", pathPrefix[index])).Path("/{name}").Handler(server)
-		router.Path("/{prefix:" + pathPrefix[index] + "}/{type}").Handler(server)
-		router.Path("/{prefix:" + pathPrefix[index] + "}/{type}/{name}").Handler(server)
-
-		fmt.Println(config, pathPrefix[index], config.ChannelsConfig())
-		next := handlers.LoggingHandler(os.Stdout, router)
-		handler := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-			user := req.Header.Get("X-SUC-Cluster-ID")
-			if user != "" && req.URL != nil {
-				req.URL.User = url.User(user)
-			}
-			next.ServeHTTP(rw, req)
-		})
-
-		err = http.ListenAndServe(address, handler)
-
 	}
 
-	return err
+	router := mux.NewRouter()
+	apiroot.Register(server.Schemas, pathPrefix, nil)
+	for _, prefix := range pathPrefix {
+		router.MatcherFunc(setType("apiRoot", prefix)).Path("/").Handler(server)
+		router.MatcherFunc(setType("apiRoot", prefix)).Path("/{name}").Handler(server)
+		router.Path("/{prefix:" + prefix + "}/{type}").Handler(server)
+		router.Path("/{prefix:" + prefix + "}/{type}/{name}").Handler(server)
+	}
+	next := handlers.LoggingHandler(os.Stdout, router)
+	handler := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		user := req.Header.Get("X-SUC-Cluster-ID")
+		if user != "" && req.URL != nil {
+			req.URL.User = url.User(user)
+		}
+		next.ServeHTTP(rw, req)
+	})
+	return http.ListenAndServe(address, handler)
+
 }
 func setType(t string, pathPrefix string) mux.MatcherFunc {
 	return func(request *http.Request, match *mux.RouteMatch) bool {
