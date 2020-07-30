@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/rancher/steve/pkg/schemaserver/store/apiroot"
+
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/rancher/channelserver/pkg/config"
@@ -14,13 +16,15 @@ import (
 	"github.com/rancher/channelserver/pkg/server/store"
 	"github.com/rancher/channelserver/pkg/server/store/release"
 	"github.com/rancher/steve/pkg/schemaserver/server"
-	"github.com/rancher/steve/pkg/schemaserver/store/apiroot"
 	"github.com/rancher/steve/pkg/schemaserver/types"
 )
 
 func ListenAndServe(ctx context.Context, address string, configs []*config.Config, pathPrefix []string) error {
-	server := server.DefaultAPIServer()
+	var servers = map[string]*server.Server{}
+
 	for index, config := range configs {
+		server := server.DefaultAPIServer()
+		servers[pathPrefix[index]] = server
 		server.Schemas.MustImportAndCustomize(model.Channel{}, func(schema *types.APISchema) {
 			schema.Store = store.New(config)
 			schema.CollectionMethods = []string{http.MethodGet}
@@ -30,18 +34,18 @@ func ListenAndServe(ctx context.Context, address string, configs []*config.Confi
 			schema.Store = release.New(config)
 			schema.CollectionMethods = []string{http.MethodGet}
 		})
-
-		pathPrefix[index] = strings.TrimPrefix(pathPrefix[index], "/")
-		pathPrefix[index] = strings.TrimSuffix(pathPrefix[index], "/")
+		pathPrefix[index] = strings.Trim(pathPrefix[index], "/")
+		apiroot.Register(servers[pathPrefix[index]].Schemas, []string{pathPrefix[index]}, []string{""})
+		//	apiroot.Register(server.Schemas, pathPrefix, pathPrefix)
 	}
 
 	router := mux.NewRouter()
-	apiroot.Register(server.Schemas, pathPrefix, nil)
 	for _, prefix := range pathPrefix {
-		router.MatcherFunc(setType("apiRoot", prefix)).Path("/").Handler(server)
-		router.MatcherFunc(setType("apiRoot", prefix)).Path("/{name}").Handler(server)
-		router.Path("/{prefix:" + prefix + "}/{type}").Handler(server)
-		router.Path("/{prefix:" + prefix + "}/{type}/{name}").Handler(server)
+
+		router.MatcherFunc(setType("apiRoot", prefix)).Path("/").Handler(servers[prefix])
+		router.MatcherFunc(setType("apiRoot", prefix)).Path("/{name}").Handler(servers[prefix])
+		router.Path("/{prefix:" + prefix + "}/{type}").Handler(servers[prefix])
+		router.Path("/{prefix:" + prefix + "}/{type}/{name}").Handler(servers[prefix])
 	}
 	next := handlers.LoggingHandler(os.Stdout, router)
 	handler := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {

@@ -90,6 +90,8 @@ func run(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
+		fmt.Println(configs)
+
 	}
 	return server.ListenAndServe(ctx, ListenAddress, configs, PathPrefix.Value())
 }
