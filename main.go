@@ -22,7 +22,7 @@ var (
 	}
 	RefreshInterval      string
 	ListenAddress        string
-	SubKey               string
+	SubKey               cli.StringSlice
 	ChannelServerVersion string
 )
 
@@ -36,10 +36,10 @@ func main() {
 			EnvVar: "URL",
 			Value:  &URLs,
 		},
-		cli.StringFlag{
-			Name:        "config-key",
-			EnvVar:      "SUBKEY",
-			Destination: &SubKey,
+		cli.StringSliceFlag{
+			Name:   "config-key",
+			EnvVar: "SUBKEY",
+			Value:  &SubKey,
 		},
 		cli.StringFlag{
 			Name:        "refresh-interval",
@@ -75,10 +75,14 @@ func run(c *cli.Context) error {
 		return errors.Wrapf(err, "failed to parse %s", RefreshInterval)
 	}
 
-	config, err := config.NewConfig(ctx, SubKey, intval, ChannelServerVersion, URLs...)
-	if err != nil {
-		return err
+	configs := map[string]*config.Config{}
+	for _, key := range SubKey {
+		cfg, err := config.NewConfig(ctx, key, intval, ChannelServerVersion, URLs...)
+		if err != nil {
+			return err
+		}
+		configs[key] = cfg
 	}
 
-	return server.ListenAndServe(ctx, ListenAddress, config)
+	return server.ListenAndServe(ctx, ListenAddress, configs)
 }

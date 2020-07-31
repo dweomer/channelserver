@@ -17,24 +17,25 @@ import (
 	"github.com/rancher/steve/pkg/schemaserver/types"
 )
 
-func ListenAndServe(ctx context.Context, address string, config *config.Config) error {
-	server := server.DefaultAPIServer()
-	server.Schemas.MustImportAndCustomize(model.Channel{}, func(schema *types.APISchema) {
-		schema.Store = store.New(config)
-		schema.CollectionMethods = []string{http.MethodGet}
-		schema.ResourceMethods = []string{http.MethodGet}
-	})
-	server.Schemas.MustImportAndCustomize(model.Release{}, func(schema *types.APISchema) {
-		schema.Store = release.New(config)
-		schema.CollectionMethods = []string{http.MethodGet}
-	})
-	apiroot.Register(server.Schemas, []string{"v1-release"}, nil)
-
+func ListenAndServe(ctx context.Context, address string, config map[string]*config.Config) error {
 	router := mux.NewRouter()
-	router.MatcherFunc(setType("apiRoot")).Path("/").Handler(server)
-	router.MatcherFunc(setType("apiRoot")).Path("/{name}").Handler(server)
-	router.Path("/{prefix:v1-release}/{type}").Handler(server)
-	router.Path("/{prefix:v1-release}/{type}/{name}").Handler(server)
+	for key, cfg := range config {
+		server := server.DefaultAPIServer()
+		server.Schemas.MustImportAndCustomize(model.Channel{}, func(schema *types.APISchema) {
+			schema.Store = store.New(cfg)
+			schema.CollectionMethods = []string{http.MethodGet}
+			schema.ResourceMethods = []string{http.MethodGet}
+		})
+		server.Schemas.MustImportAndCustomize(model.Release{}, func(schema *types.APISchema) {
+			schema.Store = release.New(cfg)
+			schema.CollectionMethods = []string{http.MethodGet}
+		})
+		apiroot.Register(server.Schemas, []string{key}, nil)
+		router.MatcherFunc(setType("apiRoot", key)).Path("/v1-" + key).Handler(server)
+		router.MatcherFunc(setType("apiRoot", key)).Path("/v1-" + key + "{name}").Handler(server)
+		router.Path("/{prefix:v1-" + key + "}/{type}").Handler(server)
+		router.Path("/{prefix:v1-" + key + "}/{type}/{name}").Handler(server)
+	}
 
 	next := handlers.LoggingHandler(os.Stdout, router)
 	handler := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
@@ -48,13 +49,13 @@ func ListenAndServe(ctx context.Context, address string, config *config.Config) 
 	return http.ListenAndServe(address, handler)
 }
 
-func setType(t string) mux.MatcherFunc {
+func setType(t, k string) mux.MatcherFunc {
 	return func(request *http.Request, match *mux.RouteMatch) bool {
 		if match.Vars == nil {
 			match.Vars = map[string]string{}
 		}
 		match.Vars["type"] = t
-		match.Vars["prefix"] = "v1-release"
+		match.Vars["prefix"] = "/v1-" + k
 		return true
 	}
 }
