@@ -44,6 +44,6 @@ k3s:
         - appVersion: '1.2.x'
           defaultVersion: '1.19.5'
   github:
-    owner: rancher
+    owner: k3s-io
     repo: k3s
-  redirectBase: https://github.com/rancher/k3s/releases/tag/
+  redirectBase: https://github.com/k3s-io/k3s/releases/tag/
