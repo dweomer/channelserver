@@ -12,6 +12,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/rancher/apiserver v0.9.5
 	github.com/rancher/wrangler/v3 v3.7.0
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/urfave/cli/v2 v2.4.0
 	sigs.k8s.io/yaml v1.6.0

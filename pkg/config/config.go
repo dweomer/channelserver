@@ -10,12 +10,17 @@ import (
 
 	"github.com/google/go-github/v67/github"
 	"github.com/rancher/channelserver/pkg/model"
+	"github.com/rancher/channelserver/pkg/wait"
 	"github.com/sirupsen/logrus"
 )
+
+type Wait wait.Wait // retained in this package for backwards compatibility
 
 type Config struct {
 	sync.Mutex
 	refreshMu sync.Mutex
+
+	Valid bool
 
 	subKey               string
 	channelServerVersion string
@@ -31,25 +36,8 @@ type Config struct {
 	appDefaultsConfig *model.AppDefaultsConfig
 }
 
-type Wait interface {
-	Wait(ctx context.Context) bool
-}
-
 type Source interface {
 	URL() string
-}
-
-type DurationWait struct {
-	Duration time.Duration
-}
-
-func (d *DurationWait) Wait(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		return false
-	case <-time.After(d.Duration):
-		return true
-	}
 }
 
 type StringSource string
@@ -58,7 +46,7 @@ func (s StringSource) URL() string {
 	return string(s)
 }
 
-func NewConfig(ctx context.Context, subKey string, wait Wait, channelServerVersion string, appName string, ghToken string, urls []Source) *Config {
+func NewConfig(ctx context.Context, subKey string, wait Wait, channelServerVersion string, appName string, ghToken string, urls []Source, fatal bool) *Config {
 	c := &Config{
 		subKey:               subKey,
 		channelServerVersion: channelServerVersion,
@@ -73,18 +61,26 @@ func NewConfig(ctx context.Context, subKey string, wait Wait, channelServerVersi
 
 	logrus.Infof("Loading configuration from %v", urls)
 	if err := c.LoadConfig(ctx); err != nil {
-		logrus.Fatalf("Failed to load initial config for %s: %v", subKey, err)
+		logrus.Fatalf("Failed to load initial config for subkey %q: %v", subKey, err)
 	}
 
-	logrus.Infof("Loaded initial configuration for %s", subKey)
+	logrus.Infof("Loaded initial configuration for subkey %q", subKey)
+	c.Valid = true
 
 	if wait != nil {
 		go func() {
 			for wait.Wait(ctx) {
+				start := time.Now()
 				if err := c.LoadConfig(ctx); err != nil {
-					logrus.Errorf("Failed to reload configuration for %s: %v", subKey, err)
+					if fatal {
+						logrus.Fatalf("Failed to reload configuration for subkey %q: %v", subKey, err)
+					} else {
+						logrus.Errorf("Failed to reload configuration for subkey %q: %v", subKey, err)
+					}
+					c.Valid = false
 				} else {
-					logrus.Infof("Reloaded configuration for %s", subKey)
+					logrus.Infof("Reloaded configuration for subkey %q in %s", subKey, time.Since(start))
+					c.Valid = true
 				}
 			}
 		}()
@@ -154,7 +150,7 @@ func (c *Config) ghClient(config *model.ChannelsConfig) (*github.Client, error) 
 	}
 
 	if c.gh == nil || c.url != config.GitHub.APIURL {
-		client := github.NewClient(nil)
+		client := github.NewClient(httpClient)
 		if c.ghToken != "" {
 			client = client.WithAuthToken(c.ghToken)
 		}

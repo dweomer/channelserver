@@ -12,14 +12,24 @@ import (
 	"github.com/google/go-github/v67/github"
 	"github.com/rancher/channelserver/pkg/model"
 	"github.com/rancher/wrangler/v3/pkg/data/convert"
+	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/yaml"
 )
 
 var (
+	pageSize   = 100
 	httpClient = &http.Client{
-		Timeout: time.Second * 5,
+		Timeout:   time.Second * 5,
+		Transport: &loggingTransport{},
 	}
 )
+
+type loggingTransport struct{}
+
+func (l *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	logrus.Debugf("Making request: %s %s", req.Method, req.URL)
+	return http.DefaultTransport.RoundTrip(req)
+}
 
 func getURLs(ctx context.Context, urls ...Source) ([]byte, int, error) {
 	var (
@@ -136,7 +146,7 @@ func GetReleasesConfig(content []byte, channelServerVersion, subKey string) (*mo
 
 func GetGHReleases(ctx context.Context, client *github.Client, owner, repo string) ([]string, error) {
 	var (
-		opt         = &github.ListOptions{}
+		opt         = &github.ListOptions{PerPage: pageSize}
 		allReleases []string
 	)
 
