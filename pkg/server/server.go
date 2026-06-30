@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,18 +19,27 @@ import (
 )
 
 func ListenAndServe(ctx context.Context, address string, configs map[string]*config.Config) error {
-	h := NewHandler(configs)
+	next := LoggingHandler(os.Stdout, NewHandler(configs))
+	server := http.Server{
+		Addr: address,
+		Handler: http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+			user := req.Header.Get("X-SUC-Cluster-ID")
+			if user != "" && req.URL != nil {
+				req.URL.User = url.User(user)
+			}
+			next.ServeHTTP(rw, req)
+		}),
+	}
 
-	next := LoggingHandler(os.Stdout, h)
-	handler := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		user := req.Header.Get("X-SUC-Cluster-ID")
-		if user != "" && req.URL != nil {
-			req.URL.User = url.User(user)
-		}
-		next.ServeHTTP(rw, req)
-	})
+	go func() {
+		<-ctx.Done()
+		server.Shutdown(context.Background())
+	}()
 
-	return http.ListenAndServe(address, handler)
+	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }
 
 func NewHandler(configs map[string]*config.Config) http.Handler {
