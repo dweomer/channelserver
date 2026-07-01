@@ -8,7 +8,7 @@ replace k8s.io/client-go => k8s.io/client-go v0.36.0
 
 require (
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/google/go-github/v67 v67.0.0
+	github.com/google/go-github/v88 v88.0.0
 	github.com/pkg/errors v0.9.1
 	github.com/rancher/apiserver v0.9.5
 	github.com/rancher/wrangler/v3 v3.7.0
@@ -26,7 +26,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
-	github.com/google/go-querystring v1.1.0 // indirect
+	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

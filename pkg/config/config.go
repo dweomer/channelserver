@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/go-github/v67/github"
+	"github.com/google/go-github/v88/github"
 	"github.com/rancher/channelserver/pkg/model"
 	"github.com/rancher/channelserver/pkg/wait"
 	"github.com/sirupsen/logrus"
@@ -148,16 +148,15 @@ func (c *Config) ghClient(config *model.ChannelsConfig) (*github.Client, error) 
 	if config.GitHub == nil {
 		return nil, nil
 	}
-
 	if c.gh == nil || c.url != config.GitHub.APIURL {
-		client := github.NewClient(httpClient)
+		opts := []github.ClientOptionsFunc{github.WithHTTPClient(httpClient)}
 		if c.ghToken != "" {
-			client = client.WithAuthToken(c.ghToken)
+			opts = append(opts, github.WithAuthToken(c.ghToken))
 		}
 		if config.GitHub.APIURL != "" {
-			return client.WithEnterpriseURLs(config.GitHub.APIURL, config.GitHub.APIURL)
+			opts = append(opts, github.WithEnterpriseURLs(config.GitHub.APIURL, config.GitHub.APIURL))
 		}
-		return client, nil
+		return github.NewClient(opts...)
 	}
 	return c.gh, nil
 }
