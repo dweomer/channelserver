@@ -28,7 +28,7 @@ type Config struct {
 	urls                 []Source
 
 	url               string
-	ghToken           string
+	ghAuth            GithubAuth
 	redirect          *url.URL
 	gh                *github.Client
 	channelsConfig    *model.ChannelsConfig
@@ -46,14 +46,14 @@ func (s StringSource) URL() string {
 	return string(s)
 }
 
-func NewConfig(ctx context.Context, subKey string, wait Wait, channelServerVersion string, appName string, ghToken string, urls []Source, fatal bool) *Config {
+func NewConfig(ctx context.Context, subKey string, wait Wait, channelServerVersion string, appName string, ghAuth GithubAuth, urls []Source, fatal bool) *Config {
 	c := &Config{
 		subKey:               subKey,
 		channelServerVersion: channelServerVersion,
 		appName:              appName,
 		urls:                 urls,
 
-		ghToken:           ghToken,
+		ghAuth:            ghAuth,
 		channelsConfig:    &model.ChannelsConfig{},
 		releasesConfig:    &model.ReleasesConfig{},
 		appDefaultsConfig: &model.AppDefaultsConfig{},
@@ -89,14 +89,14 @@ func NewConfig(ctx context.Context, subKey string, wait Wait, channelServerVersi
 	return c
 }
 
-func NewConfigNoLoad(ctx context.Context, subKey string, channelServerVersion string, appName string, ghToken string, urls []Source) *Config {
+func NewConfigNoLoad(ctx context.Context, subKey string, channelServerVersion string, appName string, ghAuth GithubAuth, urls []Source) *Config {
 	c := &Config{
 		subKey:               subKey,
 		channelServerVersion: channelServerVersion,
 		appName:              appName,
 		urls:                 urls,
 
-		ghToken:           ghToken,
+		ghAuth:            ghAuth,
 		channelsConfig:    &model.ChannelsConfig{},
 		releasesConfig:    &model.ReleasesConfig{},
 		appDefaultsConfig: &model.AppDefaultsConfig{},
@@ -150,8 +150,12 @@ func (c *Config) ghClient(config *model.ChannelsConfig) (*github.Client, error) 
 	}
 	if c.gh == nil || c.url != config.GitHub.APIURL {
 		opts := []github.ClientOptionsFunc{github.WithHTTPClient(httpClient)}
-		if c.ghToken != "" {
-			opts = append(opts, github.WithAuthToken(c.ghToken))
+		if c.ghAuth != nil {
+			authOpts, err := c.ghAuth.ClientOptions()
+			if err != nil {
+				return nil, err
+			}
+			opts = append(opts, authOpts...)
 		}
 		if config.GitHub.APIURL != "" {
 			opts = append(opts, github.WithEnterpriseURLs(config.GitHub.APIURL, config.GitHub.APIURL))

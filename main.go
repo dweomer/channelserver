@@ -25,6 +25,7 @@ var (
 	ListenAddress        string
 	AppName              string
 	GithubToken          string
+	GithubApp            config.GithubApp
 	URLs                 cli.StringSlice
 	SubKeys              cli.StringSlice
 	PathPrefix           cli.StringSlice
@@ -91,8 +92,27 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:        "github-token",
+			Usage:       "GitHub Auth Token; overrides GitHub App flags if set",
 			EnvVars:     []string{"GITHUB_TOKEN"},
 			Destination: &GithubToken,
+		},
+		&cli.Int64Flag{
+			Name:        "github-app-id",
+			Usage:       "Github App ID",
+			EnvVars:     []string{"GITHUB_APP_ID"},
+			Destination: &GithubApp.ID,
+		},
+		&cli.StringFlag{
+			Name:        "github-app-private-key",
+			Usage:       "Github App RSA Private key; accepts path to file or literal PEM encoded PKCS1 or PKCS8 key",
+			EnvVars:     []string{"GITHUB_APP_PRIVATE_KEY"},
+			Destination: &GithubApp.PrivateKey,
+		},
+		&cli.Int64Flag{
+			Name:        "github-app-installation-id",
+			Usage:       "Github App Installation ID",
+			EnvVars:     []string{"GITHUB_APP_INSTALLATION_ID"},
+			Destination: &GithubApp.InstallationID,
 		},
 		&cli.BoolFlag{
 			Name:        "debug",
@@ -113,6 +133,7 @@ func run(c *cli.Context) error {
 		sources []config.Source
 		waiter  wait.Wait
 		err     error
+		auth    config.GithubAuth
 	)
 
 	logrus.SetOutput(os.Stderr)
@@ -130,6 +151,16 @@ func run(c *cli.Context) error {
 		return err
 	}
 
+	if GithubToken != "" {
+		logrus.Info("Using GitHub auth from static token")
+		auth = config.GithubToken(GithubToken)
+	} else if GithubApp.ID != 0 && GithubApp.InstallationID != 0 && GithubApp.PrivateKey != "" {
+		logrus.Infof("Using GitHub auth from AppID %d", GithubApp.ID)
+		auth = GithubApp
+	} else {
+		logrus.Warnf("Using GitHub anonymous auth - may fail to list all releases")
+	}
+
 	if len(SubKeys.Value()) != len(PathPrefix.Value()) {
 		return errors.Errorf("keys-prefix lengths are not equal %s %s %s", PathPrefix.Value(), SubKeys.Value(), ListenAddress)
 	}
@@ -139,7 +170,7 @@ func run(c *cli.Context) error {
 	}
 	for index, subkey := range SubKeys.Value() {
 		prefix := PathPrefix.Value()[index]
-		config := config.NewConfig(ctx, subkey, waiter, ChannelServerVersion, AppName, GithubToken, sources, RefreshFatal)
+		config := config.NewConfig(ctx, subkey, waiter, ChannelServerVersion, AppName, auth, sources, RefreshFatal)
 		configs[prefix] = config
 		logrus.Infof("Serving channels from %v with subkey %q at /%s", sources, subkey, prefix)
 	}
